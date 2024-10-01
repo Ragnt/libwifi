@@ -10,24 +10,6 @@ pub struct Action {
     pub station_info: StationInfo,
 }
 
-impl Action {
-    pub fn encode(&self) -> Vec<u8> {
-        let mut encoded: Vec<u8> = Vec::new();
-
-        // Encode the ManagementHeader
-        encoded.extend(self.header.encode());
-
-        // Encode the ActionCategory and action
-        encoded.push(self.category.clone() as u8);
-        encoded.push(self.action);
-
-        // Encode StationInfo if necessary
-        encoded.extend(self.station_info.encode());
-
-        encoded
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum ActionCategory {
     SpectrumManagement,
@@ -62,6 +44,24 @@ pub enum ActionCategory {
     VendorSpecificProtected,
     VendorSpecific,
     Error,
+}
+
+impl Action {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut encoded: Vec<u8> = Vec::new();
+
+        // Encode the ManagementHeader
+        encoded.extend(self.header.encode());
+
+        // Encode the ActionCategory and action
+        encoded.push(self.category.clone() as u8);
+        encoded.push(self.action);
+
+        // Encode StationInfo if necessary
+        encoded.extend(self.station_info.encode());
+
+        encoded
+    }
 }
 
 impl From<u8> for ActionCategory {

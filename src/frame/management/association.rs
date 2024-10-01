@@ -102,6 +102,7 @@ pub struct ReassociationResponse {
     pub capability_info: u16,
     pub status_code: u16,
     pub association_id: u16,
+    pub station_info: StationInfo
 }
 
 impl ReassociationResponse {

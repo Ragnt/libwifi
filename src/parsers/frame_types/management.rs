@@ -1,3 +1,4 @@
+use components::StationInfo;
 use nom::bytes::complete::take;
 use nom::number::complete::{le_u16, le_u64, le_u8};
 
@@ -39,7 +40,6 @@ pub fn parse_association_request(
 /// - Authentication Transaction Sequence Number
 /// - Status Code
 /// - Challenge Text (optional, dynamic length)
-/// - Station Info (optional, dynamic length)
 pub fn parse_authentication_frame(
     frame_control: FrameControl,
     input: &[u8],
@@ -54,7 +54,6 @@ pub fn parse_authentication_frame(
     let mut challenge_text = None;
     let mut station_info = None;
 
-    // Parse the optional challenge text, if present
     if auth_algorithm == 1 && (auth_seq == 2 || auth_seq == 3) {
         // Parse the optional challenge text
         if !input.is_empty() {
@@ -167,12 +166,14 @@ pub fn parse_reassociation_response(
     let (input, header) = parse_management_header(frame_control, input)?;
     let (_, (capability_info, status_code, association_id)) =
         tuple((le_u16, le_u16, le_u16))(input)?;
+    let (input, station_info) = parse_station_info(input)?;
 
     Ok(Frame::ReassociationResponse(ReassociationResponse {
         header,
         capability_info,
         status_code,
         association_id,
+        station_info
     }))
 }
 

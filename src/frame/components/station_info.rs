@@ -16,8 +16,8 @@ use std::fmt;
 /// be saved in the `data` field under the respectiv element id.
 
 pub struct StationInfo {
-    pub supported_rates: Vec<f32>,
-    pub extended_supported_rates: Option<Vec<f32>>,
+    pub supported_rates: Vec<SupportedRate>,
+    pub extended_supported_rates: Option<Vec<SupportedRate>>,
     pub ssid: Option<String>,
     pub ssid_length: Option<usize>,
     pub ds_parameter_set: Option<u8>,
@@ -31,13 +31,13 @@ pub struct StationInfo {
     pub wpa_info: Option<WpaInformation>,
     pub wps_info: Option<WpsInformation>,
     pub vendor_specific: Vec<VendorSpecificInfo>,
-    pub extended_capabilities: Option<Vec<u8>>, // Add this field
+    pub extended_capabilities: Option<Vec<u8>>,
+    pub channel_switch: Option<ChannelSwitchAnnouncment>,
     pub data: Vec<(u8, Vec<u8>)>,
 }
 
 impl StationInfo {
     pub fn encode(&self) -> Vec<u8> {
-        let mandatory_rates = [6.0f32, 12.0, 24.0];
         let mut bytes = Vec::new();
 
         // Encode SSID (if present)
@@ -45,20 +45,17 @@ impl StationInfo {
             bytes.push(0); // ID
             bytes.push(ssid.len() as u8); // Length of SSID
             bytes.extend_from_slice(ssid.as_bytes()); // SSID as bytes
-        } else {
-            bytes.push(0);
-            bytes.push(0);
         }
 
         if !self.supported_rates.is_empty() {
             // Encode Supported Rates
             bytes.push(1); // ID
             bytes.push(self.supported_rates.len() as u8);
-            for &rate_mbps in &self.supported_rates {
+            for rate in &self.supported_rates {
                 // Convert rate from Mbps to 500 kbps units and then to a byte
-                let rate_byte = (rate_mbps * 2.0) as u8;
+                let rate_byte = (rate.rate * 2.0) as u8;
                 let rate_byte_with_flag = rate_byte | 0x80; // Setting MSB
-                if mandatory_rates.contains(&rate_mbps) {
+                if rate.mandatory {
                     bytes.push(rate_byte_with_flag);
                 } else {
                     bytes.push(rate_byte);
@@ -70,11 +67,11 @@ impl StationInfo {
             // Encode Supported Rates
             bytes.push(50); // ID
             bytes.push(ext_rates.len() as u8);
-            for &rate_mbps in ext_rates {
+            for rate in ext_rates {
                 // Convert rate from Mbps to 500 kbps units and then to a byte
-                let rate_byte = (rate_mbps * 2.0) as u8;
+                let rate_byte = (rate.rate * 2.0) as u8;
                 let rate_byte_with_flag = rate_byte | 0x80; // Setting MSB
-                if mandatory_rates.contains(&rate_mbps) {
+                if rate.mandatory {
                     bytes.push(rate_byte_with_flag);
                 } else {
                     bytes.push(rate_byte);
@@ -117,7 +114,7 @@ impl StationInfo {
             bytes.extend(ht_capabilities);
         }
 
-        // Encode HT Capabilities (if present) - Tag Number: 45
+        // Encode HT Information (if present) - Tag Number: 61
         if let Some(ht_info) = &self.ht_information {
             let ht_info_data = ht_info.encode();
             bytes.push(61); // HT Capabilities tag number
@@ -164,6 +161,13 @@ impl StationInfo {
             bytes.push(ext_caps.len() as u8);
             bytes.extend(ext_caps);
         }
+        
+        if let Some(chan_switch) = &self.channel_switch {
+            let encoded = chan_switch.encode();
+            bytes.push(37);
+            bytes.push(encoded.len() as u8);
+            bytes.extend(encoded);
+        }
 
         // Encode additional data
         for (id, data) in &self.data {
@@ -203,6 +207,12 @@ impl StationInfo {
     pub fn wpa_info(&self) -> Option<&WpaInformation> {
         self.wpa_info.as_ref()
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct SupportedRate {
+    pub mandatory: bool,
+    pub rate: f32,
 }
 
 pub enum Category {
@@ -772,5 +782,37 @@ impl HTInformation {
         data.push(self.primary_channel);
         data.extend(self.other_data.clone());
         data
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChannelSwitchAnnouncment {
+    pub mode: ChannelSwitchMode,
+    pub new_channel: u8,
+    pub count: u8,
+}
+
+impl ChannelSwitchAnnouncment {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut data: Vec<u8> = Vec::new();
+        data.push(self.mode.clone() as u8);
+        data.push(self.new_channel);
+        data.push(self.count);
+        data
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChannelSwitchMode {
+    Restrict = 1,
+    Unrestricted = 0,
+}
+
+impl ChannelSwitchMode {
+    pub fn from_u8(value: u8) -> ChannelSwitchMode {
+        match value {
+            1 => ChannelSwitchMode::Restrict,
+            _ => ChannelSwitchMode::Unrestricted,
+        }
     }
 }

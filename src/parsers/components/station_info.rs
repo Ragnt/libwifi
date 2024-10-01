@@ -4,11 +4,15 @@ use nom::number::complete::u8 as get_u8;
 use nom::sequence::tuple;
 use nom::IResult;
 
-use crate::frame::components::{
-    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices,
-    HTInformation, InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl,
-    RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone,
-    VendorSpecificInfo, WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
+use crate::frame::{
+    components::{
+        AudioDevices, Cameras, Category, ChannelSwitchAnnouncment, ChannelSwitchMode, Computers,
+        Displays, DockingDevices, GamingDevices, HTInformation, InputDevices, MultimediaDevices,
+        NetworkInfrastructure, PrintersEtAl, RsnAkmSuite, RsnCipherSuite, RsnInformation,
+        StationInfo, Storage, SupportedRate, Telephone, VendorSpecificInfo, WpaAkmSuite,
+        WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
+    },
+    Data,
 };
 
 /// Parse variable length and variable field information.
@@ -43,6 +47,7 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                 5 => station_info.tim = Some(data.to_vec()),
                 7 => station_info.country_info = Some(data.to_vec()),
                 32 => station_info.power_constraint = Some(data[0]),
+                37 => station_info.channel_switch = parse_channel_switch(data),
                 45 => station_info.ht_capabilities = Some(data.to_vec()),
                 48 => {
                     if let Ok(rsn_info) = parse_rsn_information(data) {
@@ -68,21 +73,19 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                             // Specific parsing for WPA Information Element
                             station_info.wpa_info =
                                 Some(parse_wpa_information(&vendor_data).unwrap());
-                        }
-
-                        if oui == [0x00, 0x50, 0xf2] && oui_type == 4 {
-                            // Specific parsing for WPA Information Element
+                        } else if oui == [0x00, 0x50, 0xf2] && oui_type == 4 {
+                            // Specific parsing for WPS Information Element
                             station_info.wps_info = parse_wps_information(&vendor_data).ok();
+                        } else {
+                            let vendor_specific_info = VendorSpecificInfo {
+                                element_id,
+                                length,
+                                oui,
+                                oui_type,
+                                data: vendor_data,
+                            };
+                            station_info.vendor_specific.push(vendor_specific_info);
                         }
-
-                        let vendor_specific_info = VendorSpecificInfo {
-                            element_id,
-                            length,
-                            oui,
-                            oui_type,
-                            data: vendor_data,
-                        };
-                        station_info.vendor_specific.push(vendor_specific_info);
                     }
                 }
                 _ => {
@@ -151,13 +154,13 @@ fn parse_wpa_information(data: &[u8]) -> Result<WpaInformation, &'static str> {
 }
 
 fn parse_ht_information(data: &[u8]) -> Result<HTInformation, &'static str> {
-    if data.len() < 1 {
+    if data.is_empty() {
         return Err("WPA Information data too short");
     }
 
     Ok(HTInformation {
-        primary_channel: data[0] as u8,
-        other_data: (&data[1..]).to_vec(),
+        primary_channel: data[0],
+        other_data: data[1..].to_vec(),
     })
 }
 
@@ -355,14 +358,10 @@ fn bytes_to_subcategory(category: &Category, bytes: Vec<u8>) -> Option<String> {
     if bytes.len() == 2 {
         let value = u16::from(bytes[0]) << 8 | u16::from(bytes[1]);
         match category {
-            Category::Computer(_) => {
-                match value {
-                    0x0001 => Some(Computers::PC.to_string()), // Example mapping
-                    // Add other mappings here
-                    _ => None,
-                }
-            }
-            // Implement for other categories
+            Category::Computer(_) => match value {
+                0x0001 => Some(Computers::PC.to_string()),
+                _ => None,
+            },
             _ => None,
         }
     } else {
@@ -371,7 +370,6 @@ fn bytes_to_subcategory(category: &Category, bytes: Vec<u8>) -> Option<String> {
 }
 
 fn parse_device_type_data(device_type_data: &[u8]) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-    // Ensure the slice has enough bytes to parse
     if device_type_data.len() >= 8 {
         let category = device_type_data[0..2].to_vec();
         let oui = device_type_data[2..6].to_vec();
@@ -379,7 +377,6 @@ fn parse_device_type_data(device_type_data: &[u8]) -> Option<(Vec<u8>, Vec<u8>, 
 
         Some((category, oui, subcategory))
     } else {
-        // Return None if the data does not have enough bytes
         None
     }
 }
@@ -457,6 +454,24 @@ pub fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str
     }
 }
 
+
+
+pub fn parse_channel_switch(data: &[u8]) -> Option<ChannelSwitchAnnouncment> {
+    if data.len() < 3 {
+        return None;
+    }
+
+    let mode = ChannelSwitchMode::from_u8(data[0]);
+    let new_channel = data[1];
+    let count = data[2];
+
+    Some(ChannelSwitchAnnouncment {
+        mode,
+        new_channel,
+        count,
+    })
+}
+
 fn parse_cipher_suite(data: &[u8]) -> WpaCipherSuite {
     match data {
         [0x00, 0x50, 0xF2, 0x01] => WpaCipherSuite::Wep40,
@@ -513,9 +528,13 @@ fn parse_akm_suite(data: &[u8]) -> RsnAkmSuite {
     }
 }
 
-fn parse_supported_rates(input: &[u8]) -> Vec<f32> {
+fn parse_supported_rates(input: &[u8]) -> Vec<SupportedRate> {
     input
         .iter()
-        .map(|&rate| (rate & 0x7F) as f32 / 2.0) // Mask out the MSB and convert
+        .map(|&data| {
+            let rate = (data & 0x7F) as f32 / 2.0;
+            let mandatory = (data & 0x80) != 0;
+            SupportedRate { mandatory, rate }
+        })
         .collect()
 }
