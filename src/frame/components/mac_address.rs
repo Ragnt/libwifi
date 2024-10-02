@@ -214,3 +214,116 @@ pub fn generate_random_bytes(x: usize) -> Vec<u8> {
 
     bytes
 }
+
+// We need to be able to glob against mac addresses, so a MacAddressGlob will be a mac address that we can do a match against.
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct MacAddressGlob {
+    pattern: [u8; 6],
+    mask: [u8; 6],
+}
+
+impl fmt::Display for MacAddressGlob {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for i in 0..6 {
+            if self.mask[i] == 0 {
+                write!(f, "*")?;
+            } else if self.mask[i] == 0xF0 {
+                write!(f, "{:x}*", self.pattern[i] >> 4)?;
+            } else {
+                write!(f, "{:02x}", self.pattern[i])?;
+            }
+            if i < 5 {
+                write!(f, ":")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub enum MacGlobParseError {
+    InvalidDigit,
+    InvalidLength,
+}
+
+impl fmt::Display for MacGlobParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MacGlobParseError::InvalidDigit => write!(f, "Invalid hex digit in pattern"),
+            MacGlobParseError::InvalidLength => write!(f, "Pattern is too long"),
+        }
+    }
+}
+
+impl MacAddressGlob {
+    pub fn new(pattern: &str) -> Result<Self, MacGlobParseError> {
+        let normalized_pattern = pattern.to_lowercase().replace(&[':', '-', '.'][..], "");
+
+        if normalized_pattern.len() > 12 {
+            return Err(MacGlobParseError::InvalidLength);
+        }
+
+        let mut pattern_bytes = [0u8; 6];
+        let mut mask_bytes = [0u8; 6];
+
+        for (i, chunk) in normalized_pattern.as_bytes().chunks(2).enumerate() {
+            if i >= 6 {
+                return Err(MacGlobParseError::InvalidLength);
+            }
+            let (pattern_byte, mask_byte) = match chunk {
+                [b'*'] => (0x00, 0x00),
+                [high, b'*'] => {
+                    let high_nibble = match high {
+                        b'0'..=b'9' => high - b'0',
+                        b'a'..=b'f' => high - b'a' + 10,
+                        _ => return Err(MacGlobParseError::InvalidDigit),
+                    };
+                    (high_nibble << 4, 0xF0)
+                }
+                [high, low] => {
+                    let high_nibble = match high {
+                        b'0'..=b'9' => high - b'0',
+                        b'a'..=b'f' => high - b'a' + 10,
+                        _ => return Err(MacGlobParseError::InvalidDigit),
+                    };
+                    let low_nibble = match low {
+                        b'0'..=b'9' => low - b'0',
+                        b'a'..=b'f' => low - b'a' + 10,
+                        _ => return Err(MacGlobParseError::InvalidDigit),
+                    };
+                    (high_nibble << 4 | low_nibble, 0xFF)
+                }
+                _ => return Err(MacGlobParseError::InvalidDigit),
+            };
+            pattern_bytes[i] = pattern_byte;
+            mask_bytes[i] = mask_byte;
+        }
+
+        // Handle patterns that are not full 6 bytes by filling remaining bytes with wildcards
+        for i in (normalized_pattern.len() / 2)..6 {
+            pattern_bytes[i] = 0x00;
+            mask_bytes[i] = 0x00;
+        }
+
+        Ok(Self {
+            pattern: pattern_bytes,
+            mask: mask_bytes,
+        })
+    }
+
+    pub fn from_mac_address(mac: &MacAddress) -> Self {
+        Self {
+            pattern: mac.0,
+            mask: [0xFF; 6],
+        }
+    }
+
+    pub fn matches(&self, mac: &MacAddress) -> bool {
+        for i in 0..6 {
+            if (mac.0[i] & self.mask[i]) != (self.pattern[i] & self.mask[i]) {
+                return false;
+            }
+        }
+        true
+    }
+}

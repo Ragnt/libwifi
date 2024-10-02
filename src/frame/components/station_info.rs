@@ -192,6 +192,18 @@ impl StationInfo {
         }
     }
 
+    // Handle ESSID where it could be empty (return Option<String> instead of String)
+    pub fn essid(&self) -> Option<String> {
+        match &self.ssid {
+            Some(ssid) if !ssid.is_empty() => Some(ssid.clone()),
+            Some(_) if self.ssid_length.is_some_and(|s| s > 0) => {
+                Some(format!("<hidden: {}>", self.ssid_length.unwrap_or(0)))
+            }
+            Some(_) => Some("<hidden>".to_string()),
+            None => None,
+        }
+    }
+
     // Function to get the channel
     pub fn channel(&self) -> Option<u8> {
         if let Some(ds) = self.ds_parameter_set {
