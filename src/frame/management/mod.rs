@@ -1,10 +1,12 @@
 mod action;
+mod action_no_ack;
 mod association;
 mod authentication;
 mod beacon;
 mod probe;
 
 pub use action::{Action, ActionCategory};
+pub use action_no_ack::ActionNoAck;
 pub use association::{
     AssociationRequest, AssociationResponse, Disassociation, ReassociationRequest,
     ReassociationResponse,

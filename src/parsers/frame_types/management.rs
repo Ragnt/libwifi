@@ -265,3 +265,24 @@ pub fn parse_action(frame_control: FrameControl, input: &[u8]) -> Result<Frame, 
         station_info,              // Assuming this comes from dynamic fields
     }))
 }
+
+/// Parse an Action No Ack frame (similar to Action but without acknowledgement)
+pub fn parse_action_no_ack(frame_control: FrameControl, input: &[u8]) -> Result<Frame, Error> {
+    let (input, header) = parse_management_header(frame_control, input)?;
+
+    // Parsing the category field (1 byte)
+    let (input, category) = le_u8(input)?;
+
+    // Parsing the action field (1 byte)
+    let (input, action) = le_u8(input)?;
+
+    // Parsing the dynamic fields (depends on category and action)
+    let (_, station_info) = parse_station_info(input)?;
+
+    Ok(Frame::ActionNoAck(ActionNoAck {
+        header,
+        category,
+        action,
+        station_info,
+    }))
+}

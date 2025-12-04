@@ -82,44 +82,22 @@ impl ManagementHeader {
 /// Contains the FragmentNumber and SequenceNumber that define the main frame and the number of fragments in the frame.
 impl Addresses for ManagementHeader {
     /// Return the mac address of the sender
+    /// For management frames, SA is always in address 2
     fn src(&self) -> Option<&MacAddress> {
-        let frame_control = &self.frame_control;
-        if frame_control.to_ds() {
-            Some(&self.address_3)
-        } else if frame_control.from_ds() {
-            Some(&self.address_1)
-        } else {
-            Some(&self.address_2)
-        }
+        Some(&self.address_2)
     }
 
     /// Return the mac address of the receiver.
+    /// For management frames, DA is always in address 1
     /// A full `ff:ff:..` usually indicates a undirected broadcast.
     fn dest(&self) -> &MacAddress {
-        let frame_control = &self.frame_control;
-        if frame_control.to_ds() && frame_control.from_ds() {
-            &self.address_3
-        } else if frame_control.to_ds() {
-            &self.address_2
-        } else if frame_control.from_ds() {
-            &self.address_3
-        } else {
-            &self.address_1
-        }
+        &self.address_1
     }
 
     /// The BSSID for this request.
-    /// In most cases, this is expected to be present.
-    /// The only time it's not, is in a wireless distributed system (WDS).
+    /// For management frames, BSSID is always in address 3
     fn bssid(&self) -> Option<&MacAddress> {
-        let frame_control = &self.frame_control;
-        if frame_control.to_ds() {
-            Some(&self.address_1)
-        } else if frame_control.from_ds() {
-            Some(&self.address_2)
-        } else {
-            Some(&self.address_3)
-        }
+        Some(&self.address_3)
     }
 }
 
@@ -195,14 +173,16 @@ impl Addresses for DataHeader {
     /// Return the mac address of the sender
     fn src(&self) -> Option<&MacAddress> {
         if self.frame_control.to_ds() && self.frame_control.from_ds() {
-            // This should be safe.
-            // If both to_ds and from_ds are true, we always read the forth address.
+            // WDS mode: SA is in address 4
             self.address_4.as_ref()
         } else if self.frame_control.to_ds() {
-            Some(&self.address_3)
+            // To AP: SA is in address 2
+            Some(&self.address_2)
         } else if self.frame_control.from_ds() {
-            Some(&self.address_1)
+            // From AP: SA is in address 3
+            Some(&self.address_3)
         } else {
+            // IBSS: SA is in address 2
             Some(&self.address_2)
         }
     }
@@ -211,12 +191,16 @@ impl Addresses for DataHeader {
     /// A full `ff:ff:..` usually indicates a undirected broadcast.
     fn dest(&self) -> &MacAddress {
         if self.frame_control.to_ds() && self.frame_control.from_ds() {
+            // WDS mode: DA is in address 3
             &self.address_3
         } else if self.frame_control.to_ds() {
-            &self.address_2
-        } else if self.frame_control.from_ds() {
+            // To AP: DA is in address 3
             &self.address_3
+        } else if self.frame_control.from_ds() {
+            // From AP: DA is in address 1
+            &self.address_1
         } else {
+            // IBSS: DA is in address 1
             &self.address_1
         }
     }
@@ -226,13 +210,17 @@ impl Addresses for DataHeader {
     /// The only time it's not, is in a wireless distributed system (WDS).
     fn bssid(&self) -> Option<&MacAddress> {
         if self.frame_control.to_ds() && self.frame_control.from_ds() {
+            // WDS mode: No BSSID field
             None
         } else if self.frame_control.to_ds() {
+            // To AP: BSSID is in address 1
             Some(&self.address_1)
         } else if self.frame_control.from_ds() {
+            // From AP: BSSID is in address 2
             Some(&self.address_2)
         } else {
-            self.address_4.as_ref()
+            // IBSS: BSSID is in address 3
+            Some(&self.address_3)
         }
     }
 }

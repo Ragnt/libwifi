@@ -61,6 +61,21 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                     }
                 }
                 191 => station_info.vht_capabilities = Some(data.to_vec()),
+                255 => {
+                    // Extension Element - contains extension ID as first byte
+                    if !data.is_empty() {
+                        let extension_id = data[0];
+                        let extension_data = &data[1..];
+                        match extension_id {
+                            35 => station_info.he_capabilities = Some(extension_data.to_vec()),
+                            108 => station_info.eht_capabilities = Some(extension_data.to_vec()),
+                            _ => {
+                                // Store unhandled extension elements
+                                station_info.data.push((element_id, data.to_vec()));
+                            }
+                        }
+                    }
+                }
                 221 => {
                     // Vendor-specific tag
                     if data.len() >= 4 {

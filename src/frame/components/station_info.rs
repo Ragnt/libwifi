@@ -27,6 +27,8 @@ pub struct StationInfo {
     pub ht_capabilities: Option<Vec<u8>>,
     pub ht_information: Option<HTInformation>,
     pub vht_capabilities: Option<Vec<u8>>,
+    pub he_capabilities: Option<Vec<u8>>,
+    pub eht_capabilities: Option<Vec<u8>>,
     pub rsn_information: Option<RsnInformation>,
     pub wpa_info: Option<WpaInformation>,
     pub wps_info: Option<WpsInformation>,
@@ -129,6 +131,22 @@ impl StationInfo {
             bytes.extend(vht_capabilities);
         }
 
+        // Encode HE Capabilities (if present) - Tag Number: 255, Extension ID: 35
+        if let Some(he_capabilities) = &self.he_capabilities {
+            bytes.push(255); // Extension tag number
+            bytes.push((he_capabilities.len() + 1) as u8); // Length (includes extension ID)
+            bytes.push(35); // HE Capabilities extension ID
+            bytes.extend(he_capabilities);
+        }
+
+        // Encode EHT Capabilities (if present) - Tag Number: 255, Extension ID: 108
+        if let Some(eht_capabilities) = &self.eht_capabilities {
+            bytes.push(255); // Extension tag number
+            bytes.push((eht_capabilities.len() + 1) as u8); // Length (includes extension ID)
+            bytes.push(108); // EHT Capabilities extension ID
+            bytes.extend(eht_capabilities);
+        }
+
         // Encode RSN Information (if present) - Tag Number: 48
         if let Some(rsn_info) = &self.rsn_information {
             bytes.push(48); // RSN Information tag number
@@ -181,14 +199,11 @@ impl StationInfo {
 
     // Helper functions!
     // Function to get the SSID from the station_info
+    // Returns empty string for hidden/missing SSIDs
     pub fn ssid(&self) -> String {
         match &self.ssid {
             Some(ssid) if !ssid.is_empty() => ssid.clone(),
-            Some(_) if self.ssid_length.is_some_and(|s| s > 0) => {
-                format!("<hidden: {}>", self.ssid_length.unwrap_or(0))
-            }
-            Some(_) => "<hidden>".to_string(),
-            None => "".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -196,11 +211,17 @@ impl StationInfo {
     pub fn essid(&self) -> Option<String> {
         match &self.ssid {
             Some(ssid) if !ssid.is_empty() => Some(ssid.clone()),
-            Some(_) if self.ssid_length.is_some_and(|s| s > 0) => {
-                Some(format!("<hidden: {}>", self.ssid_length.unwrap_or(0)))
-            }
-            Some(_) => Some("<hidden>".to_string()),
+            Some(_) if self.ssid_length.is_some_and(|s| s > 0) => None, // Hidden SSID
+            Some(_) => None, // Empty SSID
             None => None,
+        }
+    }
+    
+    // Check if this is a hidden SSID (empty SSID with non-zero length)
+    pub fn is_hidden(&self) -> bool {
+        match &self.ssid {
+            Some(ssid) if ssid.is_empty() && self.ssid_length.is_some_and(|s| s > 0) => true,
+            _ => false,
         }
     }
 

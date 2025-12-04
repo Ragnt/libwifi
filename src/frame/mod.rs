@@ -31,6 +31,7 @@ pub enum Frame {
     ReassociationRequest(ReassociationRequest),
     ReassociationResponse(ReassociationResponse),
     Action(Action),
+    ActionNoAck(ActionNoAck),
 
     // Authentication
     Authentication(Authentication),
@@ -42,6 +43,8 @@ pub enum Frame {
     Ack(Ack),
     BlockAckRequest(BlockAckRequest),
     BlockAck(BlockAck),
+    Trigger(Trigger),
+    NdpAnnouncement(NdpAnnouncement),
 
     // Data Frames
     Data(Data),

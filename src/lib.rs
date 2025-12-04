@@ -63,6 +63,7 @@ pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
         FrameSubType::Authentication => parse_authentication_frame(frame_control, input),
         FrameSubType::Deauthentication => parse_deauthentication_frame(frame_control, input),
         FrameSubType::Action => parse_action(frame_control, input),
+        FrameSubType::ActionNoAck => parse_action_no_ack(frame_control, input),
 
         // Control
         FrameSubType::Rts => parse_rts(frame_control, input),
@@ -70,6 +71,8 @@ pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
         FrameSubType::Ack => parse_ack(frame_control, input),
         FrameSubType::BlockAckRequest => parse_block_ack_request(frame_control, input),
         FrameSubType::BlockAck => parse_block_ack(frame_control, input),
+        FrameSubType::Trigger => parse_trigger(frame_control, input),
+        FrameSubType::NdpAnnouncement => parse_ndp_announcement(frame_control, input),
 
         // Data
         FrameSubType::Data => parse_data(frame_control, input),
